@@ -48,6 +48,7 @@ def checkArgs():
     parser.add_argument('-c', "--common", action="store_true",dest='common',help="Common TLD")
     parser.add_argument('-t', "--test", action="store_true",dest='test',help="Send an email test")
     parser.add_argument('-e', "--email", action="store",dest='email',help="Send an email to this receiver address in order to test the spoofing mail from address.")
+    parser.add_argument('-s', "--smtp", action="store",dest='smtp',help="Use custom SMTP server to send a test email. By default: 127.0.0.1")
 
     args = parser.parse_args()
     if (len(sys.argv)==1) or (args.file==False and args.domain == False):
@@ -96,7 +97,7 @@ def check_dmarc(domain):
 
     return flag_dmarc
 
-def spoof(domain, you):
+def spoof(domain, you, smtp):
     #Cambiar el sender dentro del postfix.
     os.system("sudo sed -ri 's/(myhostname) = (.*)/\\1 = "+domain+"/g' /etc/postfix/main.cf")
 
@@ -105,13 +106,13 @@ def spoof(domain, you):
 
     me = "test@" + domain
 
-    msg = MIMEText("Aquesta prova es la bona")
+    msg = MIMEText("test")
 
     msg['Subject'] = "Mail test from " + me
     msg['From'] = me
     msg['To'] = you
 
-    s = smtplib.SMTP('127.0.0.1')
+    s = smtplib.SMTP(smtp)
     s.sendmail(me, [you], msg.as_string())
     s.quit()
 
@@ -140,7 +141,12 @@ if __name__ == "__main__":
                         print (red_color + "[!] You can spoof this domain! ")
                         if (args.test):
                             if (args.email):
-                                spoof(dominiotld, args.email)
+                                if (args.smtp):
+                                    smtp = args.smtp
+                                    spoof(dominiotld, args.email, smtp)
+                                else:
+                                    smtp = "127.0.0.1"
+                                    spoof(dominiotld, args.email, smtp)
 
                     print (" ")
             else:
@@ -154,7 +160,12 @@ if __name__ == "__main__":
                         print (red_color + "[!] You can spoof this domain! ")
                         if (args.test):
                             if (args.email):
-                                spoof(dominiotld, args.email)
+                                if (args.smtp):
+                                    smtp = args.smtp
+                                    spoof(dominiotld, args.email, smtp)
+                                else:
+                                    smtp = "127.0.0.1"
+                                    spoof(dominiotld, args.email, smtp)
 
                     print (" ")    
         else:
@@ -166,7 +177,12 @@ if __name__ == "__main__":
                 print (red_color + "[!] You can spoof this domain! ")
                 if (args.test):
                     if (args.email):
-                        spoof(args.domain, args.email)
+                        if (args.smtp):
+                            smtp = args.smtp
+                            spoof(args.domain, args.email, smtp)
+                        else:
+                            smtp = "127.0.0.1"
+                            spoof(args.domain, args.email, smtp)
 
         print (" ")
 
@@ -184,7 +200,12 @@ if __name__ == "__main__":
                 print (red_color + "[!] You can spoof this domain! ")
                 if (args.test):
                     if (args.email):
-                        spoof(dominio, args.email)
+                        if (args.smtp):
+                            smtp = args.smtp
+                            spoof(dominio, args.email, smtp)
+                        else:
+                            smtp = "127.0.0.1"
+                            spoof(dominio, args.email, smtp)
 
             print (" ")
 
