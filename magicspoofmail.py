@@ -111,7 +111,7 @@ def spoof(domain, you):
     msg['From'] = me
     msg['To'] = you
 
-    s = smtplib.SMTP('seat.com')
+    s = smtplib.SMTP('127.0.0.1')
     s.sendmail(me, [you], msg.as_string())
     s.quit()
 
