@@ -5,7 +5,9 @@ import platform
 import smtplib
 import os
 from email.mime.text import MIMEText
-
+import dkim
+from socket import error as socket_error
+from email.mime.multipart import MIMEMultipart
 
 sistema = format(platform.system())
 
@@ -118,6 +120,65 @@ def spoof(domain, you, smtp):
 
     print (green_color + "[+]" + whiteB_color + " Email sended successfully as " + green_color + me)
 
+def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem",dkim_selector="s1"):
+
+    sender = "test@" + domain
+    subject="Test"
+    message_text="Test"
+    message_html="Test"
+
+    #Generate DKIM Certs
+    os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
+    os.system("openssl genrsa -out dkimprivatekey.pem 1024 2> /dev/null")
+    os.system("openssl rsa -in dkimprivatekey.pem -out public.pem -pubout 2> /dev/null")
+
+    if isinstance(message_text, bytes):
+        # needed for Python 3.
+        message_text = message_text.decode()
+
+    if isinstance(message_html, bytes):
+        # needed for Python 3.
+        message_html = message_html.decode()
+
+    sender_domain = sender.split("@")[-1]
+    msg = MIMEMultipart("alternative")
+    msg.attach(MIMEText(message_text, "plain"))
+    msg.attach(MIMEText(message_html, "html"))
+    msg["To"] = destination
+    msg["From"] = sender
+    msg["Subject"] = subject
+
+    try:
+        # Python 3 libraries expect bytes.
+        msg_data = msg.as_bytes()
+    except:
+        # Python 2 libraries expect strings.
+        msg_data = msg.as_string()
+
+    if dkim_private_key_path and dkim_selector:
+        with open(dkim_private_key_path) as fh:
+            dkim_private_key = fh.read()
+        headers = [b"To", b"From", b"Subject"]
+        sig = dkim.sign(message=msg_data,selector=str(dkim_selector).encode(),domain=sender_domain.encode(),privkey=dkim_private_key.encode(),include_headers=headers)
+        msg["DKIM-Signature"] = sig[len("DKIM-Signature: ") :].decode()
+
+        try:
+            # Python 3 libraries expect bytes.
+            msg_data = msg.as_bytes()
+        except:
+            # Python 2 libraries expect strings.
+            msg_data = msg.as_string()
+
+    s = smtplib.SMTP(smtp)
+    s.sendmail(sender, [destination], msg_data)
+    s.quit()
+
+    print (green_color + "[+]" + whiteB_color + " Email sended successfully as " + green_color + sender)
+    os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
+
+    return msg
+
+
 
 ########## Main function #################3
 if __name__ == "__main__":
@@ -143,10 +204,12 @@ if __name__ == "__main__":
                             if (args.email):
                                 if (args.smtp):
                                     smtp = args.smtp
-                                    spoof(dominiotld, args.email, smtp)
+                                    #spoof(dominiotld, args.email, smtp)
+                                    send_email(dominiotld, args.email, smtp)
                                 else:
                                     smtp = "127.0.0.1"
-                                    spoof(dominiotld, args.email, smtp)
+                                    #spoof(dominiotld, args.email, smtp)
+                                    send_email(dominiotld, args.email, smtp)
 
                     print (" ")
             else:
@@ -162,10 +225,12 @@ if __name__ == "__main__":
                             if (args.email):
                                 if (args.smtp):
                                     smtp = args.smtp
-                                    spoof(dominiotld, args.email, smtp)
+                                    #spoof(dominiotld, args.email, smtp)
+                                    send_email(dominiotld, args.email, smtp)
                                 else:
                                     smtp = "127.0.0.1"
-                                    spoof(dominiotld, args.email, smtp)
+                                    #spoof(dominiotld, args.email, smtp)
+                                    send_email(dominiotld, args.email, smtp)
 
                     print (" ")    
         else:
@@ -179,10 +244,12 @@ if __name__ == "__main__":
                     if (args.email):
                         if (args.smtp):
                             smtp = args.smtp
-                            spoof(args.domain, args.email, smtp)
+                            #spoof(args.domain, args.email, smtp)
+                            send_email(args.domain, args.email, smtp)
                         else:
                             smtp = "127.0.0.1"
-                            spoof(args.domain, args.email, smtp)
+                            #spoof(args.domain, args.email, smtp)
+                            send_email(args.domain, args.email, smtp)
 
         print (" ")
 
@@ -202,10 +269,12 @@ if __name__ == "__main__":
                     if (args.email):
                         if (args.smtp):
                             smtp = args.smtp
-                            spoof(dominio, args.email, smtp)
+                            #spoof(dominio, args.email, smtp)
+                            send_email(dominio, args.email, smtp)
                         else:
                             smtp = "127.0.0.1"
-                            spoof(dominio, args.email, smtp)
+                            #spoof(dominio, args.email, smtp)
+                            send_email(dominio, args.email, smtp)
 
             print (" ")
 
