@@ -5,6 +5,8 @@ import platform
 import smtplib
 import os
 from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 import dkim
 from socket import error as socket_error
 from email.mime.multipart import MIMEMultipart
@@ -33,7 +35,7 @@ elif (sistema == "Windows"):
 
 def banner():
     print (banner_color + "                                                                                           " + end_banner_color)
-    print (banner_color + "M   M   A    GGG  III  CCC         SSSS PPPP   OOO   OOO  FFFFF       M   M   A   III L    " + end_banner_color)     
+    print (banner_color + "M   M   A    GGG  III  CCC         SSSS PPPP   OOO   OOO  FFFFF       M   M   A   III L    " + end_banner_color)
     print (banner_color + "MM MM  A A  G      I  C   C       S     P   P O   O O   O F           MM MM  A A   I  L    " + end_banner_color)
     print (banner_color + "M M M AAAAA G GG   I  C            SSS  PPPP  O   O O   O FFFF        M M M AAAAA  I  L    " + end_banner_color)
     print (banner_color + "M   M A   A G   G  I  C   C           S P     O   O O   O F           M   M A   A  I  L    " + end_banner_color)
@@ -51,6 +53,7 @@ def checkArgs():
     parser.add_argument('-t', "--test", action="store_true",dest='test',help="Send an email test")
     parser.add_argument('-e', "--email", action="store",dest='email',help="Send an email to this receiver address in order to test the spoofing mail from address.")
     parser.add_argument('-s', "--smtp", action="store",dest='smtp',help="Use custom SMTP server to send a test email. By default: 127.0.0.1")
+    parser.add_argument('-a', "--attachment", action="store",dest='attachment',help="Path to the file to attach with email")
 
     args = parser.parse_args()
     if (len(sys.argv)==1) or (args.file==False and args.domain == False):
@@ -69,14 +72,14 @@ def start(domain):
 def check_spf(domain):
 
     spf = pydig.query(domain, 'TXT')
-    flag_spf = 0 
+    flag_spf = 0
 
     for line in spf:
         if ("spf" in line):
             flag_spf = 1
             print (green_color + "[+]" + whiteB_color + " SPF is present")
             break
-    
+
     if (flag_spf == 0):
         print (green_color + "[" + red_color + "-" + green_color + "]" + red_color + " This domain hasn't SPF config yet")
 
@@ -88,12 +91,12 @@ def check_dmarc(domain):
     flag_dmarc = 0
 
 
-    for line in dmarc:    
+    for line in dmarc:
         if ("DMARC" in line):
             flag_dmarc = 1
             print (green_color + "[+]" + whiteB_color + " DMARC is present")
             break
-    
+
     if (flag_dmarc == 0):
         print (green_color + "[" + red_color + "-" + green_color + "]" + red_color + " This domain hasn't DMARC register")
 
@@ -147,6 +150,18 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
     msg["To"] = destination
     msg["From"] = sender
     msg["Subject"] = subject
+
+    if (args.attachment):
+        #Attachment.
+        attach_file_name = 'test.txt'
+        attach_file = open(attach_file_name, 'rb') # Open the file as binary mode
+        payload = MIMEBase('application', 'octate-stream')
+        payload.set_payload((attach_file).read())
+        encoders.encode_base64(payload) #encode the attachment
+
+        payload.add_header('content-disposition', 'attachment', filename=attach_file_name)
+
+        msg.attach(payload)
 
     try:
         # Python 3 libraries expect bytes.
@@ -232,7 +247,7 @@ if __name__ == "__main__":
                                     #spoof(dominiotld, args.email, smtp)
                                     send_email(dominiotld, args.email, smtp)
 
-                    print (" ")    
+                    print (" ")
         else:
             start(args.domain)
             flag_spf = check_spf(args.domain)
@@ -277,5 +292,3 @@ if __name__ == "__main__":
                             send_email(dominio, args.email, smtp)
 
             print (" ")
-
-
