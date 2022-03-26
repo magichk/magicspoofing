@@ -54,6 +54,9 @@ def checkArgs():
     parser.add_argument('-e', "--email", action="store",dest='email',help="Send an email to this receiver address in order to test the spoofing mail from address.")
     parser.add_argument('-s', "--smtp", action="store",dest='smtp',help="Use custom SMTP server to send a test email. By default: 127.0.0.1")
     parser.add_argument('-a', "--attachment", action="store",dest='attachment',help="Path to the file to attach with email")
+    #Templates + subject.
+    parser.add_argument("--subject", action="store",dest='subject',help="Subject of the email message")
+    parser.add_argument("--template", action="store",dest='template',help="HTML template for body message")
 
     args = parser.parse_args()
     if (len(sys.argv)==1) or (args.file==False and args.domain == False):
@@ -126,9 +129,30 @@ def spoof(domain, you, smtp):
 def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem",dkim_selector="s1"):
 
     sender = "test@" + domain
-    subject="Test"
+    if (args.subject):
+        subject=args.subject
+    else:
+        subject="Test"
+        
+        
     message_text="Test"
-    message_html="Test"
+    if (args.template):
+        fileopen = open(args.template, "r")
+        fileread = fileopen.readlines()
+        html=""
+        for line in fileread:
+        	html = html + line
+        message_html = html
+    else:
+        message_html="""
+            <html>
+		<body>
+		   <h3>Test</h3>
+		   <br />
+		   <p>Test magicspoofing</p>
+		</body>
+	    </html>
+        """
 
     #Generate DKIM Certs
     os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
