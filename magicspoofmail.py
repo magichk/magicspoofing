@@ -111,7 +111,7 @@ def spoof(domain, you, smtp):
     os.system("sudo sed -ri 's/(myhostname) = (.*)/\\1 = "+domain+"/g' /etc/postfix/main.cf")
 
     #Reload postfix
-    os.system("systemctl restart postfix")
+    os.system("systemctl start postfix ; systemctl restart postfix")
 
     me = "test@" + domain
 
@@ -136,7 +136,7 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
             os.system("sudo sed -ri 's/(myhostname) = (.*)/\\1 = "+domain+"/g' /etc/postfix/main.cf")
 
             #Reload postfix
-            os.system("systemctl restart postfix")
+            os.system("systemctl start postfix ; systemctl restart postfix")
 
     sender = "test@" + domain
     if (args.subject):
@@ -219,8 +219,13 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
             msg_data = msg.as_string()
 
     #Change hostname from machine before send email
-    hostname = os.popen('hostname').read()
-    os.popen('hostnamectl set-hostname '+domain)
+    existhost = os.popen('grep "'+domain+'" /etc/hosts').read()
+    if (existhost==""):
+        hostname = os.popen('hostname ; echo "127.0.0.1 ' + domain + '" >> /etc/hosts').read()
+    else:
+        hostname = os.popen('hostname').read()
+
+    os.popen('hostnamectl set-hostname '+domain+' 2>&1 > /dev/null')
 
     s = smtplib.SMTP(smtp)
     s.sendmail(sender, [destination], msg_data)
@@ -230,7 +235,7 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
     os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
 
     #Change hostname to the original.
-    os.popen('hostnamectl set-hostname '+hostname)
+    os.popen('hostnamectl set-hostname '+hostname+' 2>&1 > /dev/null')
 
     return msg
 
