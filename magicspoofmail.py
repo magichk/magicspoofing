@@ -1,4 +1,5 @@
 import sys
+import apt
 import argparse
 import pydig
 import platform
@@ -127,6 +128,15 @@ def spoof(domain, you, smtp):
     print (green_color + "[+]" + whiteB_color + " Email sended successfully as " + green_color + me)
 
 def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem",dkim_selector="s1"):
+    #check if postfix is installed.
+    cache = apt.Cache()
+    if cache['postfix'].is_installed:
+        if (args.smtp is None):
+            #Cambiar el sender dentro del postfix.
+            os.system("sudo sed -ri 's/(myhostname) = (.*)/\\1 = "+domain+"/g' /etc/postfix/main.cf")
+
+            #Reload postfix
+            os.system("systemctl restart postfix")
 
     sender = "test@" + domain
     if (args.subject):
