@@ -218,12 +218,19 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
             # Python 2 libraries expect strings.
             msg_data = msg.as_string()
 
+    #Change hostname from machine before send email
+    hostname = os.popen('hostname').read()
+    os.popen('hostnamectl set-hostname '+domain)
+
     s = smtplib.SMTP(smtp)
     s.sendmail(sender, [destination], msg_data)
     s.quit()
 
     print (green_color + "[+]" + whiteB_color + " Email sended successfully as " + green_color + sender)
     os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
+
+    #Change hostname to the original.
+    os.popen('hostnamectl set-hostname '+hostname)
 
     return msg
 
