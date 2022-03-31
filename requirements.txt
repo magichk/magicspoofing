@@ -4,3 +4,4 @@ pydig
 email-to
 dkimpy
 python-apt
+python-whois

@@ -245,6 +245,7 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
     return msg
 
 def is_registered(domain_name):
+    w = whois.whois(domain_name)
     try:
         w = whois.whois(domain_name)
     except Exception:
