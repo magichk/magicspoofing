@@ -11,6 +11,7 @@ from email import encoders
 import dkim
 from socket import error as socket_error
 from email.mime.multipart import MIMEMultipart
+import whois
 
 sistema = format(platform.system())
 
@@ -147,8 +148,8 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
         subject=args.subject
     else:
         subject="Test"
-        
-        
+
+
     message_text="Test"
     if (args.template):
         fileopen = open(args.template, "r")
@@ -243,6 +244,13 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
 
     return msg
 
+def is_registered(domain_name):
+    try:
+        w = whois.whois(domain_name)
+    except Exception:
+        return False
+    else:
+        return bool(w.domain_name)
 
 
 ########## Main function #################3
@@ -260,6 +268,9 @@ if __name__ == "__main__":
                     nombre = dominio[0:inicio]
                     dominiotld = nombre + "." + tld
                     start(dominiotld)
+                    flag_exists = is_registered(dominiotld)
+                    if (flag_exists == False):
+                    	print(red_color + "[+] This domain not exists! " + whiteB_color + "If you consider, you can buy it!")
                     flag_spf = check_spf(dominiotld)
                     flag_dmarc = check_dmarc(dominiotld)
 
@@ -281,6 +292,9 @@ if __name__ == "__main__":
                 for tld in tlds:
                     dominiotld = dominio + "." + tld
                     start(dominiotld)
+                    flag_exists = is_registered(dominiotld)
+                    if (flag_exists == False):
+                    	print(red_color + "[+] This domain not exists! " + whiteB_color + "If you consider, you can buy it!")
                     flag_spf = check_spf(dominiotld)
                     flag_dmarc = check_dmarc(dominiotld)
 
@@ -300,6 +314,10 @@ if __name__ == "__main__":
                     print (" ")
         else:
             start(args.domain)
+            flag_exists = is_registered(args.domain)
+            if (flag_exists == False):
+            	print(red_color + "[+] This domain not exists! " + whiteB_color + "If you consider, you can buy it!")
+            	
             flag_spf = check_spf(args.domain)
             flag_dmarc = check_dmarc(args.domain)
 
