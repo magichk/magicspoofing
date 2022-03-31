@@ -58,6 +58,7 @@ def checkArgs():
     #Templates + subject.
     parser.add_argument("--subject", action="store",dest='subject',help="Subject of the email message")
     parser.add_argument("--template", action="store",dest='template',help="HTML template for body message")
+    parser.add_argument("--sender", action="store",dest='sender',help="Sender email by default <test@domain.tld>")
 
     args = parser.parse_args()
     if (len(sys.argv)==1) or (args.file==False and args.domain == False):
@@ -113,7 +114,10 @@ def spoof(domain, you, smtp):
     #Reload postfix
     os.system("systemctl start postfix ; systemctl restart postfix")
 
-    me = "test@" + domain
+    if (args.sender):
+        me=sender
+    else:
+        me = "test@" + domain
 
     msg = MIMEText("test")
 
