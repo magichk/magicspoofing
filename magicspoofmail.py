@@ -143,7 +143,11 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
             #Reload postfix
             os.system("systemctl start postfix ; systemctl restart postfix")
 
-    sender = "test@" + domain
+    if (args.sender):
+        sender=args.sender
+    else:
+        sender = "test@" + domain
+
     if (args.subject):
         subject=args.subject
     else:
