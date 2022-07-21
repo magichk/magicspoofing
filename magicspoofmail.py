@@ -11,7 +11,6 @@ from email import encoders
 import dkim
 from socket import error as socket_error
 from email.mime.multipart import MIMEMultipart
-import whois
 
 sistema = format(platform.system())
 
@@ -143,17 +142,18 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
             #Reload postfix
             os.system("systemctl start postfix ; systemctl restart postfix")
 
+    sender = "test@" + domain
     if (args.sender):
         sender=args.sender
     else:
-        sender = "test@" + domain
+        sender = "test@"+domain
 
     if (args.subject):
         subject=args.subject
     else:
         subject="Test"
-
-
+        
+        
     message_text="Test"
     if (args.template):
         fileopen = open(args.template, "r")
@@ -196,7 +196,8 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
 
     if (args.attachment):
         #Attachment.
-        attach_file_name = 'test.txt'
+        #attach_file_name = 'test.txt'
+        attach_file_name = args.attachment
         attach_file = open(attach_file_name, 'rb') # Open the file as binary mode
         payload = MIMEBase('application', 'octate-stream')
         payload.set_payload((attach_file).read())
@@ -228,13 +229,13 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
             msg_data = msg.as_string()
 
     #Change hostname from machine before send email
-    existhost = os.popen('grep "'+domain+'" /etc/hosts').read()
-    if (existhost==""):
-        hostname = os.popen('hostname ; echo "127.0.0.1 ' + domain + '" >> /etc/hosts').read()
-    else:
-        hostname = os.popen('hostname').read()
+    #existhost = os.popen('grep "'+domain+'" /etc/hosts').read()
+    #if (existhost==""):
+    #    hostname = os.popen('hostname ; echo "127.0.0.1 ' + domain + '" >> /etc/hosts').read()
+    #else:
+    #    hostname = os.popen('hostname').read()
 
-    os.popen('hostnamectl set-hostname '+domain+' 2>&1 > /dev/null')
+    #os.popen('hostnamectl set-hostname '+domain+' 2>&1 > /dev/null')
 
     s = smtplib.SMTP(smtp)
     s.sendmail(sender, [destination], msg_data)
@@ -244,18 +245,10 @@ def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem
     os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
 
     #Change hostname to the original.
-    os.popen('hostnamectl set-hostname '+hostname+' 2>&1 > /dev/null')
+    #os.popen('hostnamectl set-hostname '+hostname+' 2>&1 > /dev/null')
 
     return msg
 
-def is_registered(domain_name):
-    w = whois.whois(domain_name)
-    try:
-        w = whois.whois(domain_name)
-    except Exception:
-        return False
-    else:
-        return bool(w.domain_name)
 
 
 ########## Main function #################3
@@ -273,9 +266,6 @@ if __name__ == "__main__":
                     nombre = dominio[0:inicio]
                     dominiotld = nombre + "." + tld
                     start(dominiotld)
-                    flag_exists = is_registered(dominiotld)
-                    if (flag_exists == False):
-                    	print(red_color + "[+] This domain not exists! " + whiteB_color + "If you consider, you can buy it!")
                     flag_spf = check_spf(dominiotld)
                     flag_dmarc = check_dmarc(dominiotld)
 
@@ -297,9 +287,6 @@ if __name__ == "__main__":
                 for tld in tlds:
                     dominiotld = dominio + "." + tld
                     start(dominiotld)
-                    flag_exists = is_registered(dominiotld)
-                    if (flag_exists == False):
-                    	print(red_color + "[+] This domain not exists! " + whiteB_color + "If you consider, you can buy it!")
                     flag_spf = check_spf(dominiotld)
                     flag_dmarc = check_dmarc(dominiotld)
 
@@ -319,10 +306,6 @@ if __name__ == "__main__":
                     print (" ")
         else:
             start(args.domain)
-            flag_exists = is_registered(args.domain)
-            if (flag_exists == False):
-            	print(red_color + "[+] This domain not exists! " + whiteB_color + "If you consider, you can buy it!")
-            	
             flag_spf = check_spf(args.domain)
             flag_dmarc = check_dmarc(args.domain)
 
