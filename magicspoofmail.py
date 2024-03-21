@@ -95,10 +95,14 @@ def check_dmarc(domain):
     dmarc = pydig.query('_dmarc.'+domain, 'TXT')
     flag_dmarc = 0
 
-
+    #print (dmarc)
     for line in dmarc:
-        if ("DMARC" in line):
+        if ("p=none" in line):
             flag_dmarc = 1
+            print (green_color + "[+]" + red_color + " DMARC is present but wrong configured, the policiy is configured in p=none")
+            break
+        elif ("DMARC" in line):
+            flag_dmarc = 2
             print (green_color + "[+]" + whiteB_color + " DMARC is present")
             break
 
@@ -308,8 +312,8 @@ if __name__ == "__main__":
             start(args.domain)
             flag_spf = check_spf(args.domain)
             flag_dmarc = check_dmarc(args.domain)
-
-            if (flag_spf == 0 and flag_dmarc == 0):
+            #print (flag_dmarc)
+            if (flag_spf == 0 or (flag_dmarc == 0 or flag_dmarc == 1)):
                 print (red_color + "[!] You can spoof this domain! ")
                 if (args.test):
                     if (args.email):
