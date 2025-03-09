@@ -6,14 +6,14 @@ import dns.resolver
 
 def check_spf(domain, colors):
     """
-    Verifica la configuración SPF de un dominio de manera detallada
+    Performs detailed verification of a domain's SPF configuration
     
     Args:
-        domain (str): El dominio a verificar
-        colors (dict): Diccionario con los colores para la salida
+        domain (str): The domain to verify
+        colors (dict): Dictionary with colors for output
         
     Returns:
-        dict: Diccionario con información detallada sobre la configuración SPF
+        dict: Dictionary with detailed information about the SPF configuration
     """
     spf_records = pydig.query(domain, 'TXT')
     spf_found = False
@@ -39,7 +39,7 @@ def check_spf(domain, colors):
         'lookup_limit_exceeded': False
     }
     
-    # Buscar registro SPF
+    # Search for SPF record
     for record in spf_records:
         if "v=spf1" in record:
             spf_found = True
@@ -48,7 +48,7 @@ def check_spf(domain, colors):
             spf_info['record'] = record
             break
     
-    # Si no se encuentra SPF, devolver resultado
+    # If SPF is not found, return result
     if not spf_found:
         print(colors["green"] + "[" + colors["red"] + "-" + colors["green"] + "]" + 
               colors["red"] + " This domain hasn't SPF config yet")
@@ -58,24 +58,27 @@ def check_spf(domain, colors):
     
     print(colors["green"] + "[+]" + colors["white_bold"] + " SPF is present: " + spf_record)
     
-    # Analizar versión SPF
+    # Analyze SPF version
     if "v=spf1" in spf_record:
         spf_info['version'] = "spf1"
     
-    # Analizar mecanismos y modificadores
-    parts = spf_record.split()
+    # Clean the SPF record by removing quotes
+    clean_record = spf_record.strip('"\'')
+    
+    # Analyze mechanisms and modifiers
+    parts = clean_record.split()
     
     for part in parts:
-        # Saltar la versión
+        # Skip version
         if part.startswith("v="):
             continue
         
-        # Analizar mecanismo "all"
+        # Analyze "all" mechanism
         if part in ["all", "+all", "-all", "~all", "?all"]:
             spf_info['all_mechanism'] = part
             spf_info['mechanisms'].append(part)
             
-            # Evaluar nivel de seguridad basado en el mecanismo "all"
+            # Evaluate security level based on the "all" mechanism
             if part == "-all":
                 spf_info['security_level'] = "High"
             elif part == "~all":
@@ -91,33 +94,33 @@ def check_spf(domain, colors):
                 spf_info['issues'].append("Using +all allows any server to send email as your domain")
                 spf_info['recommendations'].append("Change to -all to prevent email spoofing")
         
-        # Analizar mecanismo "include"
+        # Analyze "include" mechanism
         elif part.startswith("include:"):
             included_domain = part[8:]
             spf_info['includes'].append(included_domain)
             spf_info['mechanisms'].append(part)
-            spf_info['lookup_count'] += 1  # Cada include genera una búsqueda DNS
+            spf_info['lookup_count'] += 1  # Each include generates a DNS lookup
         
-        # Analizar mecanismo "redirect"
+        # Analyze "redirect" mechanism
         elif part.startswith("redirect="):
             redirect_domain = part[9:]
             spf_info['redirects'] = redirect_domain
             spf_info['modifiers'][part.split('=')[0]] = redirect_domain
-            spf_info['lookup_count'] += 1  # redirect genera una búsqueda DNS
+            spf_info['lookup_count'] += 1  # redirect generates a DNS lookup
         
-        # Analizar mecanismo "ip4"
+        # Analyze "ip4" mechanism
         elif part.startswith("ip4:"):
             ip4 = part[4:]
             spf_info['ip4'].append(ip4)
             spf_info['mechanisms'].append(part)
         
-        # Analizar mecanismo "ip6"
+        # Analyze "ip6" mechanism
         elif part.startswith("ip6:"):
             ip6 = part[4:]
             spf_info['ip6'].append(ip6)
             spf_info['mechanisms'].append(part)
         
-        # Analizar mecanismo "a"
+        # Analyze "a" mechanism
         elif part.startswith("a:") or part == "a":
             if part == "a":
                 spf_info['a'].append(domain)
@@ -125,9 +128,9 @@ def check_spf(domain, colors):
                 a_domain = part[2:]
                 spf_info['a'].append(a_domain)
             spf_info['mechanisms'].append(part)
-            spf_info['lookup_count'] += 1  # a genera una búsqueda DNS
+            spf_info['lookup_count'] += 1  # a generates a DNS lookup
         
-        # Analizar mecanismo "mx"
+        # Analyze "mx" mechanism
         elif part.startswith("mx:") or part == "mx":
             if part == "mx":
                 spf_info['mx'].append(domain)
@@ -135,9 +138,9 @@ def check_spf(domain, colors):
                 mx_domain = part[3:]
                 spf_info['mx'].append(mx_domain)
             spf_info['mechanisms'].append(part)
-            spf_info['lookup_count'] += 1  # mx genera una búsqueda DNS
+            spf_info['lookup_count'] += 1  # mx generates a DNS lookup
         
-        # Analizar mecanismo "ptr" (obsoleto y no recomendado)
+        # Analyze "ptr" (deprecated and not recommended)
         elif part.startswith("ptr:") or part == "ptr":
             if part == "ptr":
                 spf_info['ptr'].append(domain)
@@ -145,23 +148,23 @@ def check_spf(domain, colors):
                 ptr_domain = part[4:]
                 spf_info['ptr'].append(ptr_domain)
             spf_info['mechanisms'].append(part)
-            spf_info['lookup_count'] += 1  # ptr genera múltiples búsquedas DNS
+            spf_info['lookup_count'] += 1  # ptr generates multiple DNS lookups
             spf_info['issues'].append("Using ptr mechanism which is deprecated and not recommended")
             spf_info['recommendations'].append("Remove ptr mechanism and use ip4/ip6 instead")
         
-        # Otros modificadores
+        # Other modifiers
         elif "=" in part:
             modifier_name, modifier_value = part.split('=', 1)
             spf_info['modifiers'][modifier_name] = modifier_value
     
-    # Verificar problemas comunes
+    # Check for common issues
     
-    # 1. Verificar si falta el mecanismo "all"
+    # 1. Check if the "all" mechanism is missing
     if not spf_info['all_mechanism']:
         spf_info['issues'].append("Missing 'all' mechanism at the end of SPF record")
         spf_info['recommendations'].append("Add '-all' at the end of your SPF record")
     
-    # 2. Verificar si hay demasiados mecanismos que generan búsquedas DNS
+    # 2. Check if there are too many mechanisms that generate DNS lookups
     if spf_info['lookup_count'] > 10:
         spf_info['lookup_limit_exceeded'] = True
         spf_info['issues'].append(f"SPF record exceeds the 10 DNS lookup limit ({spf_info['lookup_count']} lookups)")
@@ -170,31 +173,31 @@ def check_spf(domain, colors):
         spf_info['issues'].append(f"SPF record is close to the 10 DNS lookup limit ({spf_info['lookup_count']} lookups)")
         spf_info['recommendations'].append("Consider consolidating DNS lookups to stay well below the limit of 10")
     
-    # 3. Verificar si hay mecanismos redundantes o superpuestos
+    # 3. Check if there are redundant or overlapping mechanisms
     if len(spf_info['ip4']) > 1:
-        # Verificar superposiciones de IP
+        # Check for IP overlaps
         for i, ip1 in enumerate(spf_info['ip4']):
             for j, ip2 in enumerate(spf_info['ip4']):
                 if i != j and is_ip_overlap(ip1, ip2):
                     spf_info['issues'].append(f"Overlapping IP ranges: {ip1} and {ip2}")
                     spf_info['recommendations'].append("Consolidate overlapping IP ranges")
     
-    # 4. Verificar si se usa "ptr" (obsoleto)
+    # 4. Check if "ptr" (deprecated) is used
     if spf_info['ptr']:
         spf_info['issues'].append("Using ptr mechanism which is deprecated and not recommended")
         spf_info['recommendations'].append("Remove ptr mechanism and use ip4/ip6 instead")
     
-    # 5. Verificar si hay tanto "redirect" como "all" (conflicto)
+    # 5. Check if both "redirect" and "all" mechanisms are present (conflict)
     if spf_info['redirects'] and spf_info['all_mechanism']:
         spf_info['issues'].append("Both redirect and all mechanisms present, all will be ignored")
         spf_info['recommendations'].append("Remove either redirect or all mechanism")
     
-    # 6. Verificar si el registro es demasiado largo (más de 255 caracteres)
+    # 6. Check if the record is too long (more than 255 characters)
     if len(spf_record) > 255:
         spf_info['issues'].append(f"SPF record is too long ({len(spf_record)} characters, max recommended is 255)")
         spf_info['recommendations'].append("Split the record using include: mechanism or reduce the number of mechanisms")
     
-    # 7. Verificar si hay dominios inexistentes en includes
+    # 7. Check if there are nonexistent domains in includes
     for included_domain in spf_info['includes']:
         try:
             included_spf = pydig.query(included_domain, 'TXT')
@@ -210,13 +213,13 @@ def check_spf(domain, colors):
         except Exception:
             spf_info['issues'].append(f"Error checking included domain {included_domain}")
     
-    # 8. Verificar si hay mecanismos exp= (explicación)
+    # 8. Check if there are exp= (explanation) mechanisms
     if 'exp' in spf_info['modifiers']:
         print(colors["green"] + "[+]" + colors["white_bold"] + " SPF has explanation modifier: " + spf_info['modifiers']['exp'])
     else:
         spf_info['recommendations'].append("Consider adding an exp= modifier to provide a custom error message")
     
-    # Imprimir información detallada
+    # Print detailed information
     if spf_info['exists']:
         print(colors["green"] + "[+]" + colors["white_bold"] + " SPF Version: " + spf_info['version'])
         
@@ -235,7 +238,7 @@ def check_spf(domain, colors):
         if spf_info['all_mechanism']:
             print(colors["green"] + "[+]" + colors["white_bold"] + " SPF All Mechanism: " + spf_info['all_mechanism'])
             
-            # Mostrar nivel de seguridad con color apropiado
+            # Show security level with appropriate color
             security_color = colors["red"]
             if spf_info['security_level'] == "High":
                 security_color = colors["green"]
@@ -245,7 +248,7 @@ def check_spf(domain, colors):
             print(colors["green"] + "[+]" + colors["white_bold"] + " SPF Security Level: " + 
                   security_color + spf_info['security_level'])
         
-        # Mostrar conteo de búsquedas DNS
+        # Show DNS lookup count
         lookup_color = colors["green"]
         if spf_info['lookup_limit_exceeded']:
             lookup_color = colors["red"]
@@ -255,43 +258,43 @@ def check_spf(domain, colors):
         print(colors["green"] + "[+]" + colors["white_bold"] + " SPF DNS Lookups: " + 
               lookup_color + str(spf_info['lookup_count']) + "/10")
         
-        # Mostrar problemas encontrados
+        # Show found issues
         if spf_info['issues']:
             print(colors["green"] + "[" + colors["red"] + "!" + colors["green"] + "]" + 
                   colors["red"] + " SPF Issues Found:")
             for issue in spf_info['issues']:
                 print(colors["red"] + "   - " + issue)
         
-        # Mostrar recomendaciones
+        # Show recommendations
         if spf_info['recommendations']:
             print(colors["green"] + "[" + colors["info"] + "i" + colors["green"] + "]" + 
                   colors["info"] + " SPF Recommendations:")
             for recommendation in spf_info['recommendations']:
                 print(colors["info"] + "   - " + recommendation)
     
-    # Devolver 1 si existe SPF, 0 si no (para mantener compatibilidad con el código existente)
+    # Return 1 if SPF exists, 0 if not (to maintain compatibility with existing code)
     return 1 if spf_found else 0
 
 def is_ip_overlap(ip1, ip2):
     """
-    Verifica si hay superposición entre dos rangos de IP
+    Checks if there is an overlap between two IP ranges
     
     Args:
-        ip1 (str): Primer rango de IP (formato CIDR)
-        ip2 (str): Segundo rango de IP (formato CIDR)
+        ip1 (str): First IP range (CIDR format)
+        ip2 (str): Second IP range (CIDR format)
         
     Returns:
-        bool: True si hay superposición, False si no
+        bool: True if there is an overlap, False if not
     """
     try:
-        # Convertir a objetos de red IPv4
+        # Convert to IPv4 network objects
         network1 = ipaddress.ip_network(ip1, strict=False)
         network2 = ipaddress.ip_network(ip2, strict=False)
         
-        # Verificar si hay superposición
+        # Check for overlap
         return network1.overlaps(network2)
     except ValueError:
-        # Si hay un error al parsear las IPs, devolver False
+        # If there's an error parsing IPs, return False
         return False
 
 def check_spf_recursive(domain, max_depth=10, current_depth=0, visited=None):
@@ -838,9 +841,11 @@ def analyze_dmarc_record(domain, record, dmarc_info, colors):
         print(colors["green"] + "[+]" + colors["white_bold"] + " DMARC Subdomain Policy: " + 
               colors["info"] + "Same as main policy (inherited)")
     
-    # Analizar porcentaje (pct)
+    # Analyze percentage (pct)
     if 'pct' in fields:
-        dmarc_info['pct'] = int(fields['pct'])
+        # Clean the value to remove any quotes or extra characters
+        pct_value = fields['pct'].strip('"\'')
+        dmarc_info['pct'] = int(pct_value)
         pct_color = colors["green"]
         
         if dmarc_info['pct'] < 100:
