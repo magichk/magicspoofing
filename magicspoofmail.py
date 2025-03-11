@@ -1,354 +1,289 @@
+#!/usr/bin/env python3
+"""
+MagicSpoofMail - Herramienta para verificar y probar la suplantación de correo electrónico
+"""
+
 import sys
-import apt
-import argparse
-import pydig
-import platform
-import smtplib
 import os
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
-import dkim
-from socket import error as socket_error
-from email.mime.multipart import MIMEMultipart
+import json
+from utils import setup_colors, banner, print_domain_header
+from dns_checks import check_spf, check_dmarc, check_spf_recursive, check_dkim, check_dkim_alignment
+from email_sender import send_email
+from cli import parse_arguments
+from profiles import apply_profile, get_profile
+from config import load_config, save_config, create_default_config, apply_config_to_args
+from interactive import interactive_mode
 
-sistema = format(platform.system())
-
-if (sistema == "Linux"):
-	# Text colors
-	normal_color = "\33[00m"
-	info_color = "\033[1;33m"
-	red_color = "\033[1;31m"
-	green_color = "\033[1;32m"
-	whiteB_color = "\033[1;37m"
-	detect_color = "\033[1;34m"
-	banner_color="\033[1;33;40m"
-	end_banner_color="\33[00m"
-elif (sistema == "Windows"):
-	normal_color = ""
-	info_color = ""
-	red_color = ""
-	green_color = ""
-	whiteB_color = ""
-	detect_color = ""
-	banner_color=""
-	end_banner_color=""
-
-def banner():
-    print (banner_color + "                                                                                           " + end_banner_color)
-    print (banner_color + "M   M   A    GGG  III  CCC         SSSS PPPP   OOO   OOO  FFFFF       M   M   A   III L    " + end_banner_color)
-    print (banner_color + "MM MM  A A  G      I  C   C       S     P   P O   O O   O F           MM MM  A A   I  L    " + end_banner_color)
-    print (banner_color + "M M M AAAAA G GG   I  C            SSS  PPPP  O   O O   O FFFF        M M M AAAAA  I  L    " + end_banner_color)
-    print (banner_color + "M   M A   A G   G  I  C   C           S P     O   O O   O F           M   M A   A  I  L    " + end_banner_color)
-    print (banner_color + "M   M A   A  GGG  III  CCC        SSSS  P      OOO   OOO  F           M   M A   A III LLLLL" + end_banner_color)
-    print (banner_color + "                                                                                           " + end_banner_color)
-    print (" ")
-
-######### Check Arguments
-def checkArgs():
-    parser = argparse.ArgumentParser()
-    parser = argparse.ArgumentParser(description=red_color + 'Magic Spoof Mail 1.0\n' + info_color)
-    parser.add_argument('-f', "--file", action="store",dest='file',help="File with a list of domains to check.")
-    parser.add_argument('-d', "--domain", action="store",dest='domain',help="Single domain to check.")
-    parser.add_argument('-c', "--common", action="store_true",dest='common',help="Common TLD")
-    parser.add_argument('-t', "--test", action="store_true",dest='test',help="Send an email test")
-    parser.add_argument('-e', "--email", action="store",dest='email',help="Send an email to this receiver address in order to test the spoofing mail from address.")
-    parser.add_argument('-s', "--smtp", action="store",dest='smtp',help="Use custom SMTP server to send a test email. By default: 127.0.0.1")
-    parser.add_argument('-a', "--attachment", action="store",dest='attachment',help="Path to the file to attach with email")
-    #Templates + subject.
-    parser.add_argument("--subject", action="store",dest='subject',help="Subject of the email message")
-    parser.add_argument("--template", action="store",dest='template',help="HTML template for body message")
-    parser.add_argument("--sender", action="store",dest='sender',help="Sender email by default <test@domain.tld>")
-
-    args = parser.parse_args()
-    if (len(sys.argv)==1) or (args.file==False and args.domain == False):
-        parser.print_help(sys.stderr)
-        sys.exit(1)
-
-    return args
-
-
-
-
-def start(domain):
-    print (whiteB_color + " ---------------------------------- Analyzing " + domain + " ----------------------------------------")
-
-
-def check_spf(domain):
-
-    spf = pydig.query(domain, 'TXT')
-    flag_spf = 0
-
-    for line in spf:
-        if ("spf" in line):
-            flag_spf = 1
-            print (green_color + "[+]" + whiteB_color + " SPF is present")
-            break
-
-    if (flag_spf == 0):
-        print (green_color + "[" + red_color + "-" + green_color + "]" + red_color + " This domain hasn't SPF config yet")
-
-    return flag_spf
-
-def check_dmarc(domain):
-
-    dmarc = pydig.query('_dmarc.'+domain, 'TXT')
-    flag_dmarc = 0
-
-    #print (dmarc)
-    for line in dmarc:
-        if ("p=none" in line):
-            flag_dmarc = 1
-            print (green_color + "[+]" + red_color + " DMARC is present but wrong configured, the policiy is configured in p=none")
-            break
-        elif ("DMARC" in line):
-            flag_dmarc = 2
-            print (green_color + "[+]" + whiteB_color + " DMARC is present")
-            break
-
-    if (flag_dmarc == 0):
-        print (green_color + "[" + red_color + "-" + green_color + "]" + red_color + " This domain hasn't DMARC register")
-
-    return flag_dmarc
-
-def spoof(domain, you, smtp):
-    #Cambiar el sender dentro del postfix.
-    os.system("sudo sed -ri 's/(myhostname) = (.*)/\\1 = "+domain+"/g' /etc/postfix/main.cf")
-
-    #Reload postfix
-    os.system("systemctl start postfix ; systemctl restart postfix")
-
-    if (args.sender):
-        me=sender
-    else:
-        me = "test@" + domain
-
-    msg = MIMEText("test")
-
-    msg['Subject'] = "Mail test from " + me
-    msg['From'] = me
-    msg['To'] = you
-
-    s = smtplib.SMTP(smtp)
-    s.sendmail(me, [you], msg.as_string())
-    s.quit()
-
-    print (green_color + "[+]" + whiteB_color + " Email sended successfully as " + green_color + me)
-
-def send_email(domain,destination,smtp,dkim_private_key_path="dkimprivatekey.pem",dkim_selector="s1"):
-    #check if postfix is installed.
-    cache = apt.Cache()
-    if cache['postfix'].is_installed:
-        if (args.smtp is None):
-            #Cambiar el sender dentro del postfix.
-            os.system("sudo sed -ri 's/(myhostname) = (.*)/\\1 = "+domain+"/g' /etc/postfix/main.cf")
-
-            #Reload postfix
-            os.system("systemctl start postfix ; systemctl restart postfix")
-
-    sender = "test@" + domain
-    if (args.sender):
-        sender=args.sender
-    else:
-        sender = "test@"+domain
-
-    if (args.subject):
-        subject=args.subject
-    else:
-        subject="Test"
+def process_domain(domain, args, colors):
+    """
+    Procesa un dominio individual: verifica SPF, DMARC y opcionalmente envía un correo de prueba
+    
+    Args:
+        domain (str): El dominio a procesar
+        args (argparse.Namespace): Argumentos de línea de comandos
+        colors (dict): Diccionario con los colores para la salida
+    """
+    print_domain_header(domain, colors)
+    
+    # Verificar SPF (ahora devuelve 1 si existe, 0 si no)
+    flag_spf = check_spf(domain, colors)
+    
+    # Si se requiere un análisis más profundo de SPF, podemos usar check_spf_recursive
+    if flag_spf == 1 and args.deep_spf:
+        print(colors["info"] + "\nPerforming deep SPF analysis (recursive)..." + colors["normal"])
+        spf_recursive = check_spf_recursive(domain, max_depth=args.max_lookups)
         
+        if spf_recursive['lookup_count'] > 10:
+            print(colors["red"] + f"[!] Deep analysis shows this domain exceeds the SPF lookup limit: {spf_recursive['lookup_count']}/10" + colors["normal"])
         
-    message_text="Test"
-    if (args.template):
-        fileopen = open(args.template, "r")
-        fileread = fileopen.readlines()
-        html=""
-        for line in fileread:
-        	html = html + line
-        message_html = html
-    else:
-        message_html="""
-            <html>
-		<body>
-		   <h3>Test</h3>
-		   <br />
-		   <p>Test magicspoofing</p>
-		</body>
-	    </html>
-        """
-
-    #Generate DKIM Certs
-    os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
-    os.system("openssl genrsa -out dkimprivatekey.pem 1024 2> /dev/null")
-    os.system("openssl rsa -in dkimprivatekey.pem -out public.pem -pubout 2> /dev/null")
-
-    if isinstance(message_text, bytes):
-        # needed for Python 3.
-        message_text = message_text.decode()
-
-    if isinstance(message_html, bytes):
-        # needed for Python 3.
-        message_html = message_html.decode()
-
-    sender_domain = sender.split("@")[-1]
-    msg = MIMEMultipart("alternative")
-    msg.attach(MIMEText(message_text, "plain"))
-    msg.attach(MIMEText(message_html, "html"))
-    msg["To"] = destination
-    msg["From"] = sender
-    msg["Subject"] = subject
-
-    if (args.attachment):
-        #Attachment.
-        #attach_file_name = 'test.txt'
-        attach_file_name = args.attachment
-        attach_file = open(attach_file_name, 'rb') # Open the file as binary mode
-        payload = MIMEBase('application', 'octate-stream')
-        payload.set_payload((attach_file).read())
-        encoders.encode_base64(payload) #encode the attachment
-
-        payload.add_header('content-disposition', 'attachment', filename=attach_file_name)
-
-        msg.attach(payload)
-
-    try:
-        # Python 3 libraries expect bytes.
-        msg_data = msg.as_bytes()
-    except:
-        # Python 2 libraries expect strings.
-        msg_data = msg.as_string()
-
-    if dkim_private_key_path and dkim_selector:
-        with open(dkim_private_key_path) as fh:
-            dkim_private_key = fh.read()
-        headers = [b"To", b"From", b"Subject"]
-        sig = dkim.sign(message=msg_data,selector=str(dkim_selector).encode(),domain=sender_domain.encode(),privkey=dkim_private_key.encode(),include_headers=headers)
-        msg["DKIM-Signature"] = sig[len("DKIM-Signature: ") :].decode()
-
-        try:
-            # Python 3 libraries expect bytes.
-            msg_data = msg.as_bytes()
-        except:
-            # Python 2 libraries expect strings.
-            msg_data = msg.as_string()
-
-    #Change hostname from machine before send email
-    #existhost = os.popen('grep "'+domain+'" /etc/hosts').read()
-    #if (existhost==""):
-    #    hostname = os.popen('hostname ; echo "127.0.0.1 ' + domain + '" >> /etc/hosts').read()
-    #else:
-    #    hostname = os.popen('hostname').read()
-
-    #os.popen('hostnamectl set-hostname '+domain+' 2>&1 > /dev/null')
-
-    s = smtplib.SMTP(smtp)
-    s.sendmail(sender, [destination], msg_data)
-    s.quit()
-
-    print (green_color + "[+]" + whiteB_color + " Email sended successfully as " + green_color + sender)
-    os.system("rm -rf dkimprivatekey.pem public.pem 2> /dev/null")
-
-    #Change hostname to the original.
-    #os.popen('hostnamectl set-hostname '+hostname+' 2>&1 > /dev/null')
-
-    return msg
-
-
-
-########## Main function #################3
-if __name__ == "__main__":
-    args = checkArgs()
-    banner()
-
-    if (args.domain):
-        dominio = args.domain
-        if (args.common):
-            tlds = ['es','com','fr','it','co.uk','cat','de','be','au','xyz']
-            inicio = dominio.find(".")
-            if (inicio != -1):
-                for tld in tlds:
-                    nombre = dominio[0:inicio]
-                    dominiotld = nombre + "." + tld
-                    start(dominiotld)
-                    flag_spf = check_spf(dominiotld)
-                    flag_dmarc = check_dmarc(dominiotld)
-
-                    if (flag_spf == 0 and flag_dmarc == 0):
-                        print (red_color + "[!] You can spoof this domain! ")
-                        if (args.test):
-                            if (args.email):
-                                if (args.smtp):
-                                    smtp = args.smtp
-                                    #spoof(dominiotld, args.email, smtp)
-                                    send_email(dominiotld, args.email, smtp)
-                                else:
-                                    smtp = "127.0.0.1"
-                                    #spoof(dominiotld, args.email, smtp)
-                                    send_email(dominiotld, args.email, smtp)
-
-                    print (" ")
-            else:
-                for tld in tlds:
-                    dominiotld = dominio + "." + tld
-                    start(dominiotld)
-                    flag_spf = check_spf(dominiotld)
-                    flag_dmarc = check_dmarc(dominiotld)
-
-                    if (flag_spf == 0 and flag_dmarc == 0):
-                        print (red_color + "[!] You can spoof this domain! ")
-                        if (args.test):
-                            if (args.email):
-                                if (args.smtp):
-                                    smtp = args.smtp
-                                    #spoof(dominiotld, args.email, smtp)
-                                    send_email(dominiotld, args.email, smtp)
-                                else:
-                                    smtp = "127.0.0.1"
-                                    #spoof(dominiotld, args.email, smtp)
-                                    send_email(dominiotld, args.email, smtp)
-
-                    print (" ")
+        if spf_recursive['errors']:
+            print(colors["red"] + "[!] Deep analysis found errors in SPF chain:" + colors["normal"])
+            for error in spf_recursive['errors']:
+                print(colors["red"] + f"   - {error}" + colors["normal"])
+    
+    # Verificar DMARC
+    flag_dmarc = check_dmarc(domain, colors)
+    
+    # Verificar DKIM si se solicita
+    if args.check_dkim:
+        # Si se especifican selectores, usarlos; de lo contrario, usar los predeterminados
+        selectors = None
+        if args.dkim_selectors:
+            selectors = args.dkim_selectors.split(',')
+        
+        # Verificar DKIM
+        dkim_info = check_dkim(domain, colors, selectors=selectors)
+        
+        # Verificar alineación DKIM si se solicita
+        if args.check_alignment:
+            alignment_info = check_dkim_alignment(domain, colors)
+    
+    # Verificar si se puede suplantar el dominio
+    can_spoof = False
+    
+    # Criterios para determinar si se puede suplantar:
+    # 1. No hay SPF (flag_spf == 0)
+    # 2. DMARC está ausente (flag_dmarc == 0) o mal configurado (flag_dmarc == 1)
+    # 3. Si se verificó DKIM y no se encontraron selectores
+    if flag_spf == 0:
+        can_spoof = True
+        print(colors["red"] + "[!] You can spoof this domain based on missing SPF configuration!")
+    
+    if flag_dmarc == 0 or flag_dmarc == 1:
+        can_spoof = True
+        if flag_dmarc == 0:
+            print(colors["red"] + "[!] You can spoof this domain based on missing DMARC configuration!")
         else:
-            start(args.domain)
-            flag_spf = check_spf(args.domain)
-            flag_dmarc = check_dmarc(args.domain)
-            #print (flag_dmarc)
-            if (flag_spf == 0 or (flag_dmarc == 0 or flag_dmarc == 1)):
-                print (red_color + "[!] You can spoof this domain! ")
-                if (args.test):
-                    if (args.email):
-                        if (args.smtp):
-                            smtp = args.smtp
-                            #spoof(args.domain, args.email, smtp)
-                            send_email(args.domain, args.email, smtp)
-                        else:
-                            smtp = "127.0.0.1"
-                            #spoof(args.domain, args.email, smtp)
-                            send_email(args.domain, args.email, smtp)
+            print(colors["red"] + "[!] You can spoof this domain based on weak DMARC configuration (p=none)!")
+    
+    if args.check_dkim and 'dkim_info' in locals() and not dkim_info['selectors_found']:
+        can_spoof = True
+        print(colors["red"] + "[!] You can spoof this domain based on missing DKIM configuration!")
+    
+    # Enviar correo de prueba si se solicita y se puede suplantar
+    if can_spoof and args.test and args.email:
+        smtp = args.smtp if args.smtp else "127.0.0.1"
+        send_email(
+            domain=domain, 
+            destination=args.email, 
+            smtp=smtp, 
+            colors=colors,
+            sender=args.sender,
+            subject=args.subject,
+            template=args.template,
+            attachment=args.attachment
+        )
+    
+    # Si no se puede suplantar, mostrar mensaje
+    if not can_spoof:
+        print(colors["green"] + "[+]" + colors["white_bold"] + " This domain is well protected against email spoofing!")
+    
+    # Guardar resultados en formato JSON si se solicita
+    if args.json_output or args.output_file:
+        results = {
+            "domain": domain,
+            "spf": {
+                "exists": flag_spf == 1,
+                "secure": flag_spf == 1
+            },
+            "dmarc": {
+                "exists": flag_dmarc > 0,
+                "secure": flag_dmarc == 2
+            },
+            "dkim": {},
+            "can_spoof": can_spoof
+        }
+        
+        if args.check_dkim and 'dkim_info' in locals():
+            results["dkim"] = {
+                "exists": bool(dkim_info['selectors_found']),
+                "selectors": dkim_info['selectors_found'],
+                "security_level": dkim_info['security_level']
+            }
+        
+        if args.output_file:
+            try:
+                with open(args.output_file, 'w') as f:
+                    json.dump(results, f, indent=4)
+                print(colors["green"] + f"[+] Results saved to {args.output_file}")
+            except Exception as e:
+                print(colors["red"] + f"[!] Error saving results: {e}")
+        
+        if args.json_output:
+            print(json.dumps(results, indent=4))
+    
+    print(" ")
 
-        print (" ")
+def process_common_tlds(domain_name, args, colors):
+    """
+    Procesa un nombre de dominio con diferentes TLDs comunes
+    
+    Args:
+        domain_name (str): El nombre base del dominio
+        args (argparse.Namespace): Argumentos de línea de comandos
+        colors (dict): Diccionario con los colores para la salida
+    """
+    tlds = ['es', 'com', 'fr', 'it', 'co.uk', 'cat', 'de', 'be', 'au', 'xyz']
+    
+    # Determinar si el dominio ya tiene un TLD
+    dot_index = domain_name.find(".")
+    
+    if dot_index != -1:
+        # Si ya tiene un TLD, extraer el nombre base
+        base_name = domain_name[0:dot_index]
+        for tld in tlds:
+            domain_with_tld = f"{base_name}.{tld}"
+            process_domain(domain_with_tld, args, colors)
+    else:
+        # Si no tiene TLD, usar el nombre completo como base
+        for tld in tlds:
+            domain_with_tld = f"{domain_name}.{tld}"
+            process_domain(domain_with_tld, args, colors)
 
-    if (args.file):
-        fichero = open(args.file, "r")
-        lineas = fichero.readlines()
+def main():
+    """Función principal del programa"""
+    # Obtener argumentos de línea de comandos
+    args = parse_arguments()
+    
+    # Configurar colores
+    colors = setup_colors()
+    
+    # Mostrar banner
+    banner(colors)
+    
+    # Crear configuración por defecto si se solicita
+    if args.create_config:
+        config = create_default_config()
+        print(colors["green"] + f"[+] Default configuration created at ~/.magicspoofmail.json")
+        print(json.dumps(config, indent=4))
+        return
+    
+    # Cargar configuración si se especifica
+    if args.config_file:
+        config = load_config(args.config_file)
+        args = apply_config_to_args(args, config)
+    
+    # Aplicar perfil si se especifica
+    if args.profile:
+        args = apply_profile(args, args.profile)
+        print(colors["green"] + f"[+] Using profile: {args.profile}")
+    
+    # Guardar configuración si se solicita
+    if args.save_config:
+        config = vars(args)
+        config["name"] = args.save_config
+        
+        current_config = load_config()
+        current_config["saved_configs"] = current_config.get("saved_configs", {})
+        current_config["saved_configs"][args.save_config] = config
+        
+        if save_config(current_config):
+            print(colors["green"] + f"[+] Configuration saved as '{args.save_config}'")
+        else:
+            print(colors["red"] + f"[!] Error saving configuration")
+    
+    # Modo interactivo
+    if args.interactive:
+        interactive_args = interactive_mode()
+        if interactive_args:
+            args = interactive_args
+        else:
+            return
+    
+    # Asegurarse de que todos los atributos necesarios estén definidos
+    if not hasattr(args, 'domain'):
+        args.domain = None
+    if not hasattr(args, 'file'):
+        args.file = None
+    if not hasattr(args, 'common'):
+        args.common = False
+    if not hasattr(args, 'test'):
+        args.test = False
+    if not hasattr(args, 'email'):
+        args.email = None
+    if not hasattr(args, 'smtp'):
+        args.smtp = "127.0.0.1"
+    if not hasattr(args, 'subject'):
+        args.subject = None
+    if not hasattr(args, 'template'):
+        args.template = None
+    if not hasattr(args, 'attachment'):
+        args.attachment = None
+    if not hasattr(args, 'sender'):
+        args.sender = None
+    if not hasattr(args, 'deep_spf'):
+        args.deep_spf = False
+    if not hasattr(args, 'spf_details'):
+        args.spf_details = False
+    if not hasattr(args, 'max_lookups'):
+        args.max_lookups = 10
+    if not hasattr(args, 'check_dkim'):
+        args.check_dkim = False
+    if not hasattr(args, 'dkim_selectors'):
+        args.dkim_selectors = None
+    if not hasattr(args, 'check_alignment'):
+        args.check_alignment = False
+    if not hasattr(args, 'dkim_key_min_size'):
+        args.dkim_key_min_size = 1024
+    if not hasattr(args, 'check_dmarc_ext'):
+        args.check_dmarc_ext = False
+    if not hasattr(args, 'check_external_reports'):
+        args.check_external_reports = False
+    if not hasattr(args, 'recommend_dmarc'):
+        args.recommend_dmarc = False
+    if not hasattr(args, 'dmarc_policy'):
+        args.dmarc_policy = "reject"
+    if not hasattr(args, 'verbose'):
+        args.verbose = 0
+    if not hasattr(args, 'quiet'):
+        args.quiet = False
+    if not hasattr(args, 'json_output'):
+        args.json_output = False
+    if not hasattr(args, 'output_file'):
+        args.output_file = None
+    
+    # Procesar un dominio único
+    if args.domain:
+        if args.common:
+            # Procesar con TLDs comunes
+            process_common_tlds(args.domain, args, colors)
+        else:
+            # Procesar un solo dominio
+            process_domain(args.domain, args, colors)
 
-        for dominio in lineas:
-            dominio = dominio[0:len(dominio)-1]
-            start(dominio)
-            flag_spf = check_spf(dominio)
-            flag_dmarc = check_dmarc(dominio)
+    # Procesar una lista de dominios desde un archivo
+    if args.file:
+        try:
+            with open(args.file, "r") as file:
+                domains = file.readlines()
+                
+            for domain in domains:
+                domain = domain.strip()
+                if domain:  # Ignorar líneas vacías
+                    process_domain(domain, args, colors)
+        except Exception as e:
+            print(colors["red"] + f"[!] Error reading file: {e}")
+            sys.exit(1)
 
-            if (flag_spf == 0 and flag_dmarc == 0):
-                print (red_color + "[!] You can spoof this domain! ")
-                if (args.test):
-                    if (args.email):
-                        if (args.smtp):
-                            smtp = args.smtp
-                            #spoof(dominio, args.email, smtp)
-                            send_email(dominio, args.email, smtp)
-                        else:
-                            smtp = "127.0.0.1"
-                            #spoof(dominio, args.email, smtp)
-                            send_email(dominio, args.email, smtp)
-
-            print (" ")
+if __name__ == "__main__":
+    main()

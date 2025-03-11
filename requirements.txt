@@ -1,7 +1,8 @@
-argparse
-secure-smtplib
-pydig
-email-to
-dkimpy
-python-apt
-python-whois
+argparse>=1.4.0
+secure-smtplib>=0.1.1
+pydig>=0.4.0
+email-to>=0.1.0
+dkimpy>=1.0.5
+python-whois>=0.7.3
+ipaddress>=1.0.23
+dnspython>=2.2.1
